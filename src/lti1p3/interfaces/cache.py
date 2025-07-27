@@ -12,7 +12,7 @@ class Cache(Protocol):
     def cache_nonce(self, nonce: str, state: str):
         ...
 
-    def check_nonce_is_valid(self, state: str) -> bool:
+    def check_nonce_is_valid(self, nonce: str, state: str) -> bool:
         ...
 
     def get_access_token(self, key: str) -> str | None:
