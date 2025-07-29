@@ -3,9 +3,12 @@ from enum import Enum, auto
 
 class LtiExceptionType(Enum):
     MISSING_LOGIN_PARAMETERS = auto()
+    MISSING_STATE = auto()
+    MISSING_ID_TOKEN = auto()
     NO_REGISTRATION = auto()
     NO_TOOL_KEY_SET = auto()
     NO_DEPLOYMENT = auto()
+    INVALID_STATE = auto()
 
 
 class LtiException(Exception):

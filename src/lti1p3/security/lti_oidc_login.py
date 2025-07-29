@@ -1,16 +1,17 @@
 from urllib.parse import urlencode
 
 from lti1p3.exception import LtiException, LtiExceptionType
-from lti1p3.helpers import create_secure_hash
+from lti1p3.helpers import generate_token
 from lti1p3.registration.lti_registration_repository import LtiRegistrationRepository
 
-
+# TODO: Need to implement a cookie interface and
+#  pass to this class in order to store state and nonce
 class LtiOidcLogin:
-    def __init__(self, repository: LtiRegistrationRepository, ):
-        self.repository = repository
+    def __init__(self, registration_repository: LtiRegistrationRepository):
+        self._registration_repository = registration_repository
 
     @staticmethod
-    def validate_oidc_login_request(request: dict):
+    def _validate_oidc_login_request(request: dict):
         """
         Validates the OIDC login request.
 
@@ -26,13 +27,13 @@ class LtiOidcLogin:
         if "target_link_uri" not in request:
             raise LtiException(LtiExceptionType.MISSING_LOGIN_PARAMETERS, message="missing target_link_uri")
 
-    def create_redirect_uri(self, request: dict):
+    def initialize(self, request: dict):
         """
-        See: https://www.imsglobal.org/spec/security/v1p0/#openid_connect_launch_flow
+        See: https://www.imsglobal.org/spec/security/v1p1#step-2-authentication-request
         """
-        self.validate_oidc_login_request(request)
+        self._validate_oidc_login_request(request)
 
-        registration = self.repository.find_by_tool_issuer(request["iss"], request["client_id"])
+        registration = self._registration_repository.find_by_tool_issuer(request["iss"], request["client_id"])
 
         if not registration:
             raise LtiException(LtiExceptionType.NO_REGISTRATION, message="registration not found")
@@ -56,10 +57,19 @@ class LtiOidcLogin:
             "client_id": request["client_id"],
             "redirect_uri": request["target_link_uri"],
             "login_hint": request["login_hint"],
-            "state": create_secure_hash()
+            "state": generate_token(),
+            "response_mode": "form_post",
+            "nonce": generate_token(),
+            "prompt": "none",
+
         }
 
-        auth_query = urlencode(auth_params)
-        redirect_uri = f"{registration.platform.oidc_authentication_url}?{auth_query}"
+        # Append lti_message_hint if provided in the ODIC login request
+        # See: https://www.imsglobal.org/spec/lti/v1p3#lti_message_hint-login-parameter
+        if "lti_message_hint" in request:
+            auth_params["lti_message_hint"] = request["lti_message_hint"]
 
-        return redirect_uri
+        auth_query = urlencode(auth_params)
+        url = f"{registration.platform.oidc_authentication_url}?{auth_query}"
+
+        return url
