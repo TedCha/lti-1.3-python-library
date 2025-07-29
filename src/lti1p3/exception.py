@@ -4,7 +4,7 @@ from enum import Enum, auto
 class LtiExceptionType(Enum):
     MISSING_LOGIN_PARAMETERS = auto()
     NO_REGISTRATION = auto()
-    NO_TOOL_KEY_CHAIN = auto()
+    NO_TOOL_KEY_SET = auto()
     NO_DEPLOYMENT = auto()
 
 

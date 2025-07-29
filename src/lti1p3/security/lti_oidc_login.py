@@ -1,3 +1,5 @@
+from urllib.parse import urlencode
+
 from lti1p3.exception import LtiException, LtiExceptionType
 from lti1p3.helpers import create_secure_hash
 from lti1p3.registration.lti_registration_repository import LtiRegistrationRepository
@@ -24,7 +26,7 @@ class LtiOidcLogin:
         if "target_link_uri" not in request:
             raise LtiException(LtiExceptionType.MISSING_LOGIN_PARAMETERS, message="missing target_link_uri")
 
-    def initiate(self, request: dict):
+    def create_redirect_uri(self, request: dict):
         """
         See: https://www.imsglobal.org/spec/security/v1p0/#openid_connect_launch_flow
         """
@@ -35,12 +37,12 @@ class LtiOidcLogin:
         if not registration:
             raise LtiException(LtiExceptionType.NO_REGISTRATION, message="registration not found")
 
-        tool_key_chain = registration.tool_key_chain
+        tool_key_set = registration.tool_key_set
 
-        if not tool_key_chain:
+        if not tool_key_set:
             raise LtiException(
-                LtiExceptionType.NO_TOOL_KEY_CHAIN,
-                message="registration does not have a configured tool key chain",
+                LtiExceptionType.NO_TOOL_KEY_SET,
+                message="registration does not have a configured tool key set",
                 identifier=registration.identifier
             )
 
@@ -48,7 +50,7 @@ class LtiOidcLogin:
         if deployment_id and not registration.has_deployment_id(deployment_id):
             raise LtiException(LtiExceptionType.NO_DEPLOYMENT, message="deployment not found for registration")
 
-        auth_request = {
+        auth_params = {
             "scope": "openid",
             "response_type": "id_token",
             "client_id": request["client_id"],
@@ -56,3 +58,8 @@ class LtiOidcLogin:
             "login_hint": request["login_hint"],
             "state": create_secure_hash()
         }
+
+        auth_query = urlencode(auth_params)
+        redirect_uri = f"{registration.platform.oidc_authentication_url}?{auth_query}"
+
+        return redirect_uri
