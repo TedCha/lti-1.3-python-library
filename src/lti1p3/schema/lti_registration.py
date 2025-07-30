@@ -1,9 +1,6 @@
 from dataclasses import dataclass
 from typing import Protocol
 
-from lti1p3.schema.lti_platform import LtiPlatform
-from lti1p3.schema.lti_tool import LtiTool
-
 
 @dataclass(frozen=True)
 class LtiRegistration:
@@ -12,10 +9,14 @@ class LtiRegistration:
     """
     identifier: str
     client_id: str
+    platform_audience: str
+    platform_authentication_url: str
+    platform_access_token_url: str
+    platform_jwks_url: str
+    is_active: str
+    tool_public_key: str | None
+    tool_private_key: str | None
     deployment_ids: list[str]
-    platform: LtiPlatform
-    tool: LtiTool
-    kid: str
 
     def has_deployment_id(self, value: str):
         return value in self.deployment_ids

@@ -98,14 +98,14 @@ def create_oidc_authentication_url(
     if not registration:
         raise LtiException(LtiExceptionType.NO_REGISTRATION, message="registration not found")
 
-    # TODO: Do I need to check the tool key set here?
-    tool_key_set = registration.tool_key_set
-    if not tool_key_set:
-        raise LtiException(
-            LtiExceptionType.NO_TOOL_KEY_SET,
-            message="registration does not have a configured tool key set",
-            identifier=registration.identifier
-        )
+    # TODO: Need to verify if I actually need to check the tool key set here
+    # tool_key_set = registration.tool_key_set
+    # if not tool_key_set:
+    #     raise LtiException(
+    #         LtiExceptionType.NO_TOOL_KEY_SET,
+    #         message="registration does not have a configured tool key set",
+    #         identifier=registration.identifier
+    #     )
 
     deployment_id = login_request["lti_deployment_id"]
     if deployment_id and not registration.has_deployment_id(deployment_id):
@@ -146,7 +146,7 @@ def create_oidc_authentication_url(
         auth_params["lti_message_hint"] = login_request["lti_message_hint"]
 
     auth_query = urlencode(auth_params)
-    url = f"{registration.platform.oidc_authentication_url}?{auth_query}"
+    url = f"{registration.platform_authentication_url}?{auth_query}"
 
     return url
 
