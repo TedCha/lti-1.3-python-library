@@ -1,7 +1,6 @@
 from typing import Protocol
 
-# TODO: Notes about how this is generic to allow for cookies or localStorage to be used
-class KeyValueRepository(Protocol):
+class SessionRepository(Protocol):
     def get(self, key: str) -> str | None:
         ...
 

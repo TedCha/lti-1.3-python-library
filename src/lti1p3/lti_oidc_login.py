@@ -1,14 +1,23 @@
 from urllib.parse import urlencode
 
+import jwt
+
 from lti1p3.exception import LtiException, LtiExceptionType
 from lti1p3.helpers import generate_token
 from lti1p3.registration.lti_registration_repository import LtiRegistrationRepository
+from lti1p3.session_repository import SessionRepository
+
 
 # TODO: Need to implement a cookie interface and
 #  pass to this class in order to store state and nonce
 class LtiOidcLogin:
-    def __init__(self, registration_repository: LtiRegistrationRepository):
+    def __init__(
+            self,
+            registration_repository: LtiRegistrationRepository,
+            session_repository: SessionRepository,
+    ):
         self._registration_repository = registration_repository
+        self._session_repository = session_repository
 
     @staticmethod
     def _validate_oidc_login_request(request: dict):
@@ -33,8 +42,7 @@ class LtiOidcLogin:
         """
         self._validate_oidc_login_request(request)
 
-        registration = self._registration_repository.find_by_tool_issuer(request["iss"], request["client_id"])
-
+        registration = self._registration_repository.find_by_platform_issuer(request["iss"], request["client_id"])
         if not registration:
             raise LtiException(LtiExceptionType.NO_REGISTRATION, message="registration not found")
 
@@ -51,17 +59,34 @@ class LtiOidcLogin:
         if deployment_id and not registration.has_deployment_id(deployment_id):
             raise LtiException(LtiExceptionType.NO_DEPLOYMENT, message="deployment not found for registration")
 
+        state_payload = {
+            "iss": request["iss"],
+            "client_id": request["client_id"],
+        }
+
+        # Create state token as JWT token that encodes the login issuer and client_id
+        # See: https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
+        # TODO: Need to implement the tool-wide signing key
+        state_token = jwt.encode(state_payload, ..., algorithm="HS256")
+
+        # Persist the state token in the session repository to look up the registration during launch
+        self._session_repository.set("lti1p3-state", state_token)
+
+
+        # Create nonce token as persist the token in the session repository to look up registration during launch
+        nonce_token = generate_token()
+        self._session_repository.set("lti1p3-nonce", nonce_token)
+
         auth_params = {
             "scope": "openid",
             "response_type": "id_token",
             "client_id": request["client_id"],
             "redirect_uri": request["target_link_uri"],
             "login_hint": request["login_hint"],
-            "state": generate_token(),
+            "state": state_token,
             "response_mode": "form_post",
-            "nonce": generate_token(),
+            "nonce": nonce_token,
             "prompt": "none",
-
         }
 
         # Append lti_message_hint if provided in the ODIC login request

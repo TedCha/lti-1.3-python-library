@@ -9,6 +9,7 @@ class LtiExceptionType(Enum):
     NO_TOOL_KEY_SET = auto()
     NO_DEPLOYMENT = auto()
     INVALID_STATE = auto()
+    INVALID_NONCE = auto()
 
 
 class LtiException(Exception):
