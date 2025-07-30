@@ -5,7 +5,8 @@ from dataclasses import dataclass
 class LtiTool:
     identifier: str
     name: str
-    audience: str
+    issuer: str
     oidc_initiation_url: str
     launch_url: str
     deep_linking_url: str
+    jwks_url: str

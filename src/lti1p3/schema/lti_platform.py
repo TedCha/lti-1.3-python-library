@@ -5,6 +5,7 @@ from dataclasses import dataclass
 class LtiPlatform:
     identifier: str
     name: str
-    audience: str
+    issuer: str
     oidc_authentication_url: str
     oauth2_access_token_url: str
+    jwks_url: str
