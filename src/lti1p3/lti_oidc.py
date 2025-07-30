@@ -5,7 +5,7 @@ import jwt
 from lti1p3.exception import LtiException, LtiExceptionType
 from lti1p3.helpers import generate_token
 from lti1p3.schema.lti_registration import LtiRegistrationRepository
-from lti1p3.schema.session_repository import SessionRepository
+from lti1p3.schema.session import SessionRepository
 
 
 def _validate_oidc_login_request(request: dict):
