@@ -10,6 +10,8 @@ class LtiExceptionType(Enum):
     NO_DEPLOYMENT = auto()
     INVALID_STATE = auto()
     INVALID_NONCE = auto()
+    FAILED_TO_FETCH_OIDC_CONFIG = auto()
+    EXPIRED_LOGIN_DATA = auto()
 
 
 class LtiException(Exception):

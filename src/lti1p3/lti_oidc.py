@@ -1,3 +1,7 @@
+import json
+import time
+import urllib.request
+from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode
 
 import jwt
@@ -6,6 +10,40 @@ from lti1p3.exception import LtiException, LtiExceptionType
 from lti1p3.helpers import generate_token
 from lti1p3.schema.lti_registration import LtiRegistrationRepository
 from lti1p3.schema.session import SessionRepository
+
+LTI_SESSION_KEY_PREFIX = "lti1p3-"
+LTI_SESSION_OIDC_LOGIN_DATA_KEY = LTI_SESSION_KEY_PREFIX + "login"
+
+
+def fetch_openid_configuration(openid_config_url: str, token: str = None) -> dict:
+    headers = {"Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+
+    try:
+        req = urllib.request.Request(openid_config_url, headers=headers)
+        with urllib.request.urlopen(req, timeout=30) as response:
+            content = response.read()
+            return json.loads(content.decode("utf-8"))
+    except HTTPError as e:
+        raise LtiException(
+            LtiExceptionType.FAILED_TO_FETCH_OIDC_CONFIG,
+            message="failed to fetch oidc configuration because of HTTP error",
+            openid_config_url=openid_config_url,
+        ) from e
+    except URLError as e:
+        if isinstance(e.reason, TimeoutError):
+            raise LtiException(
+                LtiExceptionType.FAILED_TO_FETCH_OIDC_CONFIG,
+                message="failed to fetch oidc configuration because of timeout",
+                openid_config_url=openid_config_url,
+            ) from e
+        else:
+            raise LtiException(
+                LtiExceptionType.FAILED_TO_FETCH_OIDC_CONFIG,
+                message="failed to fetch oidc configuration because of network error",
+                openid_config_url=openid_config_url,
+            ) from e
 
 
 def _validate_oidc_login_request(request: dict):
@@ -27,7 +65,7 @@ def _validate_oidc_login_request(request: dict):
         raise LtiException(LtiExceptionType.MISSING_LOGIN_PARAMETERS, message="missing target_link_uri")
 
 
-def _validate_platform_originating_authentication_response(launch_request: dict):
+def _validate_platform_originating_authentication_response(launch_request: dict, session_login_data: dict):
     """
     Validates the launch request (e.g. the authentication response).
 
@@ -42,42 +80,27 @@ def _validate_platform_originating_authentication_response(launch_request: dict)
     if "id_token" not in launch_request:
         raise LtiException(LtiExceptionType.MISSING_ID_TOKEN, message="missing id_token")
 
+    if time.time() > session_login_data["expires_at"]:
+        raise LtiException(LtiExceptionType.EXPIRED_LOGIN_DATA, message="invalid login data")
 
-def _validate_and_extract_state_claims(launch_request: dict, session_repository: SessionRepository):
+
+def _validate_state(launch_request: dict, session_login_data: dict):
     """
-    Validates the OAuth2 state parameter and extracts claims from the encoded JWT value.
-
-    Returns:
-        dict: Decoded state payload with 'iss' and 'client_id'
+    Validates the OAuth2 state parameter.
 
     Raises:
         LtiException
     """
 
     received_state = launch_request["state"]
-    session_state = session_repository.get("lti1p3-state")
-
-    if received_state != session_state:
+    if received_state != session_login_data["state"]:
         raise LtiException(LtiExceptionType.INVALID_STATE, message="invalid state parameter")
 
-    # TODO: Need to implement the tool-wide signing key
-    state_payload = jwt.decode(session_state, ..., algorithm="HS256")
 
-    if "iss" not in state_payload:
-        raise LtiException(LtiExceptionType.INVALID_STATE, message="invalid state parameter")
-
-    if "client_id" not in state_payload:
-        raise LtiException(LtiExceptionType.INVALID_STATE, message="invalid state parameter")
-
-    return {"iss": state_payload["iss"], "client_id": state_payload["client_id"]}
-
-
-def _validate_nonce(jwt_payload: dict, session_repository: SessionRepository):
+def _validate_nonce(jwt_payload: dict, session_login_data: dict):
     received_nonce = jwt_payload["nonce"]
-    session_nonce = session_repository.get("lti1p3-nonce")
 
-    # TODO: Need to explore if nonce should be encoded as JWT with expiration time
-    if received_nonce != session_nonce:
+    if received_nonce != session_login_data["nonce"]:
         raise LtiException(LtiExceptionType.INVALID_NONCE, message="invalid nonce parameter")
 
 
@@ -98,35 +121,21 @@ def create_oidc_authentication_url(
     if not registration:
         raise LtiException(LtiExceptionType.NO_REGISTRATION, message="registration not found")
 
-    # TODO: Need to verify if I actually need to check the tool key set here
-    # tool_key_set = registration.tool_key_set
-    # if not tool_key_set:
-    #     raise LtiException(
-    #         LtiExceptionType.NO_TOOL_KEY_SET,
-    #         message="registration does not have a configured tool key set",
-    #         identifier=registration.identifier
-    #     )
-
     deployment_id = login_request["lti_deployment_id"]
     if deployment_id and not registration.has_deployment_id(deployment_id):
         raise LtiException(LtiExceptionType.NO_DEPLOYMENT, message="deployment not found for registration")
 
-    state_payload = {
-        "iss": login_request["iss"],
-        "client_id": login_request["client_id"],
-    }
-
-    # Create state token as JWT token that encodes the login issuer and client_id
+    # Create state and nonce tokens and persist them in the session to be used for validation during launch
     # See: https://openid.net/specs/openid-connect-core-1_0.html#AuthRequest
-    # TODO: Need to implement the tool-wide signing key
-    state_token = jwt.encode(state_payload, ..., algorithm="HS256")
-
-    # Persist the state token in the session repository to look up the registration during launch
-    session_repository.set("lti1p3-state", state_token)
-
-    # Create nonce token as persist the token in the session repository to look up registration during launch
+    state_token = generate_token()
     nonce_token = generate_token()
-    session_repository.set("lti1p3-nonce", nonce_token)
+
+    session_repository.set(LTI_SESSION_OIDC_LOGIN_DATA_KEY, {
+        "state": state_token,
+        "nonce": nonce_token,
+        "registration_id": registration.identifier,  # Used to look up the registration during launch
+        "expires_at": time.time() + 300  # Expires in 5 minutes
+    })
 
     auth_params = {
         "scope": "openid",
@@ -159,10 +168,15 @@ def validate_oidc_authentication_response(
     """
     Validates the OIDC authentication response. Expected to be used during LTI launch.
     """
-    _validate_platform_originating_authentication_response(launch_request)
-    state_claims = _validate_and_extract_state_claims(launch_request, session_repository)
 
-    registration = registration_repository.find_by_platform_issuer(state_claims["iss"], state_claims["client_id"])
+    # Retrieve OIDC login data
+    login_data = session_repository.get(LTI_SESSION_OIDC_LOGIN_DATA_KEY)
+
+    # Preliminary validation
+    _validate_platform_originating_authentication_response(launch_request, login_data)
+    _validate_state(launch_request, login_data)
+
+    registration = registration_repository.find(login_data["registration_id"])
     if not registration:
         raise LtiException(LtiExceptionType.NO_REGISTRATION, message="registration not found")
 
@@ -185,7 +199,7 @@ def validate_oidc_authentication_response(
 
     # Validate the nonce
     # See: https://openid.net/specs/openid-connect-core-1_0.html#ImplicitIDTValidation
-    _validate_nonce(lti_payload, session_repository)
+    _validate_nonce(lti_payload, login_data)
 
     # TODO: Need to figure out what to do with launch data (how does it extend to adapters?)
     print(lti_payload)
