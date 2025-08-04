@@ -11,6 +11,7 @@ class LtiExceptionType(Enum):
     INVALID_STATE = auto()
     INVALID_NONCE = auto()
     FAILED_TO_FETCH_OIDC_CONFIG = auto()
+    FAILED_TO_FETCH_JWKS = auto()
     EXPIRED_LOGIN_DATA = auto()
 
 

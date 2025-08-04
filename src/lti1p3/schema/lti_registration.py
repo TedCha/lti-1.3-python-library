@@ -5,21 +5,17 @@ from typing import Protocol
 @dataclass(frozen=True)
 class LtiRegistration:
     """
-    See: http://www.imsglobal.org/spec/lti/v1p3/#tool-deployment-0
+    See: https://www.imsglobal.org/spec/lti/v1p3/#tool-deployment-0
     """
     identifier: str
     client_id: str
-    platform_audience: str
-    platform_authentication_url: str
-    platform_access_token_url: str
-    platform_jwks_url: str
+    issuer: str
+    audience: str
+    authentication_url: str
+    access_token_url: str
+    jwks_url: str
     is_active: str
-    tool_public_key: str | None
-    tool_private_key: str | None
-    deployment_ids: list[str]
-
-    def has_deployment_id(self, value: str):
-        return value in self.deployment_ids
+    tool_id: str
 
 
 class LtiRegistrationRepository(Protocol):
