@@ -1,6 +1,7 @@
 import json
 import time
 import urllib.request
+from collections.abc import MutableMapping
 from urllib.error import URLError, HTTPError
 from urllib.parse import urlencode
 
@@ -10,8 +11,7 @@ from joserfc.jwt import JWTClaimsRegistry
 
 from lti1p3.exception import LtiException, LtiExceptionType
 from lti1p3.helpers import generate_token
-from lti1p3.schema.lti_registration import LtiRegistrationRepository
-from lti1p3.schema.session import SessionRepository
+from lti1p3.schema.lti_registration import FindLtiRegistrationByPlatformIssuer, FindLtiRegistration
 
 LTI_SESSION_KEY_PREFIX = "lti1p3-"
 LTI_SESSION_OIDC_LOGIN_DATA_KEY = LTI_SESSION_KEY_PREFIX + "login"
@@ -130,8 +130,8 @@ def _validate_state(launch_request: dict, session_login_data: dict):
 
 def create_oidc_authentication_url(
         login_request: dict,
-        registration_repository: LtiRegistrationRepository,
-        session_repository: SessionRepository,
+        find_registration_by_platform_issuer_fn: FindLtiRegistrationByPlatformIssuer,
+        session: MutableMapping,
 ):
     """
     Create the OIDC authentication URL using the OIDC login request.
@@ -141,7 +141,7 @@ def create_oidc_authentication_url(
     # Validate the request
     _validate_oidc_login_request(login_request)
 
-    registration = registration_repository.find_by_platform_issuer(login_request["iss"], login_request["client_id"])
+    registration = find_registration_by_platform_issuer_fn(login_request["iss"], login_request["client_id"])
     if not registration:
         raise LtiException(LtiExceptionType.NO_REGISTRATION, message="registration not found")
 
@@ -155,12 +155,12 @@ def create_oidc_authentication_url(
     state_token = generate_token()
     nonce_token = generate_token()
 
-    session_repository.set(LTI_SESSION_OIDC_LOGIN_DATA_KEY, {
+    session[LTI_SESSION_OIDC_LOGIN_DATA_KEY] = {
         "state": state_token,
         "nonce": nonce_token,
         "registration_id": registration.identifier,  # Used to look up the registration during launch
         "expires_at": time.time() + 300  # Expires in 5 minutes
-    })
+    }
 
     auth_params = {
         "scope": "openid",
@@ -187,21 +187,21 @@ def create_oidc_authentication_url(
 
 def validate_oidc_authentication_response(
         launch_request: dict,
-        registration_repository: LtiRegistrationRepository,
-        session_repository: SessionRepository
+        find_registration_fn: FindLtiRegistration,
+        session: MutableMapping,
 ):
     """
     Validates the OIDC authentication response. Expected to be used during LTI launch.
     """
 
     # Retrieve OIDC login data
-    login_data = session_repository.get(LTI_SESSION_OIDC_LOGIN_DATA_KEY)
+    login_data = session[LTI_SESSION_OIDC_LOGIN_DATA_KEY]
 
     # Preliminary validation
     _validate_platform_originating_authentication_response(launch_request, login_data)
     _validate_state(launch_request, login_data)
 
-    registration = registration_repository.find(login_data["registration_id"])
+    registration = find_registration_fn(login_data["registration_id"])
     if not registration:
         raise LtiException(LtiExceptionType.NO_REGISTRATION, message="registration not found")
 

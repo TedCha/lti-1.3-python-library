@@ -18,15 +18,11 @@ class LtiRegistration:
     tool_id: str
 
 
-class LtiRegistrationRepository(Protocol):
-    def find(self, identifier: str) -> LtiRegistration | None:
+class FindLtiRegistrationByPlatformIssuer(Protocol):
+    def __call__(self, issuer: str, client_id: str) -> LtiRegistration | None:
         ...
 
-    def find_by_client_id(self, client_id: str) -> list[LtiRegistration] | None:
-        ...
 
-    def find_by_platform_issuer(self, issuer: str, client_id: str) -> LtiRegistration | None:
-        ...
-
-    def find_by_tool_issuer(self, issuer: str, client_id: str) -> LtiRegistration | None:
+class FindLtiRegistration(Protocol):
+    def __call__(self, identifier: str) -> LtiRegistration | None:
         ...

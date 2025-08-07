@@ -5,13 +5,12 @@ from dataclasses import dataclass
 class LtiTool:
     identifier: str
     name: str
+    description: str
+    url: str
     initiate_login_url: str
-    redirect_uris: str
-    client_name: str
+    redirect_uris: list[str]
     jwks_uri: str
     logo_uri: str
-    domain: str
-    description: str
     target_link_uri: str
-    custom_parameters: str
+    custom_parameters: dict
     use_deep_linking: bool
